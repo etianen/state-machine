@@ -57,6 +57,7 @@ const baseResolver = (resolve, next, action) => {
  */
 export const createMachine = () => {
     let state;
+    const getState = () => state;
     // Subscriptions management.
     const listeners = [];
     const subscribe = listener => {
@@ -71,7 +72,7 @@ export const createMachine = () => {
         listeners.forEach(listener => listener(state));
     }, baseResolver);
     // All done!
-    return {subscribe, update};
+    return {getState, subscribe, update};
 };
 
 
@@ -158,8 +159,8 @@ export const chainActions = (...actions) => actions[Symbol.iterator]();
  * Top-level API for creating a state machine application.
  */
 export const createApp = (actionCreators={}, middleware=[defaultMiddleware]) => {
-    const {subscribe, update: baseUpdate} = createMachine();
+    const {getState, subscribe, update: baseUpdate} = createMachine();
     const update = applyMiddleware(middleware, baseUpdate);
     const actions = bindActionCreators(actionCreators, update);
-    return {subscribe, update, actions};
+    return {getState, subscribe, update, actions};
 };
