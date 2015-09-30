@@ -1,0 +1,17 @@
+language: node_js
+node_js:
+- 0.12
+cache:
+  directories:
+  - node_modules
+deploy:
+  provider: npm
+  email: dave@etianen.com
+  api_key:
+    secure: XN2lzGh653Hm5DUfdW1OMVQTEKg/V3ni0pBt53eKRU5/foyNOipXXG4TrzeX8GOKm1Y0aFBVQiR7qdeWWLCjjngnRoY+sov56CvVeeaANfMT+0ki4baYayHknrOuDWzZn3/jADVjxGYNaPbjbfqXWOoMpg00/j3UQrz6isNqzC/R2j0oSL6ZCKZLCZjjVcaG/F4Q1Dgl/REtNT2/CPY+GUgJa3UaSaK7Z56NtSfOfAO6nCzX7rn5yE7g7uP7aeZDHCtw3MJ9snCsjk8uOBrtjviYxecHyU8le5oAccu+yYgGEjj6pclGHVkKgSnwjfC+X3Ui2rLf12QB8xwI9TDHp0eqLztsCRJZDEpPukcGo7MOXkO7o7ryKgj0zxqUMTj3Z3QGnYWLvaAKXoVGiQMcWOd6aQQlOq3U7cbrVxZCGkS25EMZ9Ly3sWmxMhS99b7k8XARwaKcTOpS9v0HeP8abGKIlJnbemBw7gFpLmGaLCUURQhGuZtPWXStWztCRucMsYkmKjFkzubCeEPkyrEiBj4p1P6MaoFNriDtoe7xHP6H8G15jlWW0Iodgb33MTFtYInS+Iakm7lmPXeBbl3+hnkAS0XZhOgOgtQfsqTpI+20PVIG2XUsFOzE+ZIhrsWiE2/Ad/mbes42e1QgFNaZ/LOoB2qTgxW6G2JFyGInzH8=
+  skip_cleanup: true
+  on:
+    tags: true
+notifications:
+  on_success: never
+  on_failure: change
