@@ -23,7 +23,7 @@ const mapValues = (obj, func) => Object.keys(obj).reduce((newObj, key) => {
  * Record objects are immutable objects with string keys
  * and immutable values.
  */
-export const createRecord = (...args) => Object.freeze(Object.assign(Object.create(null), ...args));
+export const createRecord = (...args) => Object.freeze(Object.assign({}, ...args));
 
 
 const EMPTY_RECORD = createRecord();
