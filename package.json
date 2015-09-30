@@ -1,0 +1,26 @@
+{
+  "name": "state-machine",
+  "version": "0.9.0",
+  "description": "Immutable state management for javascript clients and servers.",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "mocha --compilers js:babel/register src/**/__tests__/*-test.js",
+    "prepublish": "babel --loose=all --stage=0 -d lib/ src/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/etianen/state-machine.git"
+  },
+  "author": "Dave Hall <dave@etianen.com> (http://www.etianen.com/)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/etianen/state-machine/issues"
+  },
+  "homepage": "https://github.com/etianen/state-machine#readme",
+  "devDependencies": {
+    "babel": "^5.8.23",
+    "expect.js": "^0.3.1",
+    "mocha": "^2.3.3",
+    "rx-lite": "^4.0.0"
+  }
+}

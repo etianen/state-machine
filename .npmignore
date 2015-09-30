@@ -1,0 +1,6 @@
+.DS_Store
+.project
+.pydevproject
+node_modules
+*.log
+src
