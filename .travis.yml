@@ -4,6 +4,8 @@ node_js:
 cache:
   directories:
   - node_modules
+before_install:
+- npm install npm@latest
 deploy:
   provider: npm
   email: dave@etianen.com
