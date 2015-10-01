@@ -3,10 +3,11 @@ import {Observable} from "rx-lite";
 import {createApp, bindActionCreators, replaceState, setState, chainActions} from "../";
 
 
-let subscribe, update, unsubscribe, history;
+let getState, subscribe, update, unsubscribe, history;
 
 beforeEach(() => {
     const app = createApp();
+    getState = app.getState;
     subscribe = app.subscribe;
     update = app.update;
     history = [];
@@ -14,7 +15,16 @@ beforeEach(() => {
 });
 
 
-describe("machine", () => {
+describe("getState", () => {
+
+    it("provides a snapshot of current state", () => {
+        expect(getState()).to.eql(undefined);
+    });
+
+});
+
+
+describe("subscribe", () => {
 
     it("provides subscribers with initial state", () => {
         expect(history).to.eql([undefined]);
