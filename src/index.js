@@ -1,20 +1,15 @@
-// Type detection utilities.
+import isFunction from "lodash/lang/isFunction";
+import mapValues from "lodash/object/mapValues";
+import pull from "lodash/array/pull";
 
-const isFunction = value => typeof value === "function";
+
+// Type detection utilities.
 
 const isIterator = value => value && isFunction(value.next);
 
 const isPromise = value => value && isFunction(value.then);
 
 const isObservable = value => value && isFunction(value.subscribe) && isFunction(value.forEach);
-
-
-// Iteration utilities.
-
-const mapValues = (obj, func) => Object.keys(obj).reduce((newObj, key) => {
-    newObj[key] = func(obj[key], key);
-    return newObj;
-}, {});
 
 
 /**
@@ -64,7 +59,7 @@ export const createMachine = () => {
         listeners.push(listener);
         listener(state);
         // The unsubscribe function.
-        return () => listeners.splice(listeners.indexOf(listener), 1);
+        return () => pull(listeners, listener);
     };
     // State management.
     const update = createUpdate(action => {
