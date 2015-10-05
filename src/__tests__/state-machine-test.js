@@ -1,6 +1,7 @@
 import expect from "expect.js";
 import {Observable} from "rx-lite";
-import {createApp, bindActionCreators, replaceState, setState, chainActions} from "../";
+import constant from "lodash/utility/constant";
+import {createApp, bindActionCreators, setState, chainActions} from "../";
 
 
 let getState, subscribe, update, unsubscribe, history;
@@ -31,13 +32,13 @@ describe("subscribe", () => {
     });
 
     it("notifies listeners of new state", () => {
-        update(replaceState("bar"));
+        update(constant("bar"));
         expect(history).to.eql([undefined, "bar"]);
     });
 
     it("returns an unsubscribe function", () => {
         unsubscribe();
-        update(replaceState("bar"));
+        update(constant("bar"));
         expect(history).to.eql([undefined]);
     });
 
@@ -47,7 +48,7 @@ describe("subscribe", () => {
 describe("iteratorMiddleware", () => {
 
     it("resolves iterators", () => {
-        update(chainActions(replaceState("foo"), replaceState("bar")));
+        update(chainActions(constant("foo"), constant("bar")));
         expect(history).to.eql([undefined, "foo", "bar"]);
     });
 
@@ -57,7 +58,7 @@ describe("iteratorMiddleware", () => {
 describe("promiseMiddleware", () => {
 
     it("resolves promises", async () => {
-        const promise = Promise.resolve(replaceState("foo"));
+        const promise = Promise.resolve(constant("foo"));
         update(promise);
         await promise;
         expect(history).to.eql([undefined, "foo"]);
@@ -69,7 +70,7 @@ describe("promiseMiddleware", () => {
 describe("observableMiddleware", () => {
 
     it("resolves observables", async () => {
-        const observable = Observable.of(replaceState("foo"), replaceState("bar"));
+        const observable = Observable.of(constant("foo"), constant("bar"));
         update(observable);
         await observable.toPromise();
         expect(history).to.eql([undefined, "foo", "bar"]);
@@ -125,7 +126,8 @@ describe("nested bound action creators", () => {
         actions = bindActionCreators({
             nested: {
                 default: () => setState({foo: "FOO"}),
-                setFoo: v => setState({foo: v})
+                setFoo: v => setState({foo: v}),
+                setFooPromise: async v => setState({foo: v})
             }
         }, update);
     });
@@ -136,6 +138,11 @@ describe("nested bound action creators", () => {
 
     it("applies nested actions", () => {
         actions.nested.setFoo("FOO2");
+        expect(history).to.eql([undefined, {nested: {foo: "FOO"}}, {nested: {foo: "FOO2"}}]);
+    });
+
+    it("resolves nested actions", async () => {
+        await actions.nested.setFooPromise("FOO2");
         expect(history).to.eql([undefined, {nested: {foo: "FOO"}}, {nested: {foo: "FOO2"}}]);
     });
 

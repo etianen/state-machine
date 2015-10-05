@@ -1,41 +1,34 @@
 import isFunction from "lodash/lang/isFunction";
-import mapValues from "lodash/object/mapValues";
 import pull from "lodash/array/pull";
+import assign from "lodash/object/assign";
+import mapValues from "lodash/object/mapValues";
+
+
+const freeze = Object.freeze;
 
 
 // Type detection utilities.
 
-const isIterator = value => value && isFunction(value.next);
+const isObservable = value => value && isFunction(value.subscribe) && isFunction(value.forEach);
 
 const isPromise = value => value && isFunction(value.then);
 
-const isObservable = value => value && isFunction(value.subscribe) && isFunction(value.forEach);
+const isIterator = value => value && isFunction(value.next);
 
 
-/**
- * Creates and returns a new record object.
- *
- * Record objects are immutable objects with string keys
- * and immutable values.
- */
-export const createRecord = (...args) => Object.freeze(Object.assign({}, ...args));
-
-
-const EMPTY_RECORD = createRecord();
-
-
-const createUpdate = (baseUpdate, resolver) => {
-    const update = action => resolver(update, () => baseUpdate(action), action);
-    update.resolver = resolver;
+const createUpdate = (baseUpdate, middleware) => {
+    const update = middleware(action => update(action), baseUpdate);
+    update._middleware = middleware;
+    update._baseUpdate = baseUpdate;
     return update;
 };
 
 
-const baseResolver = (resolve, next, action) => {
+const baseMiddleware = (update, next) => action => {
     if (!isFunction(action)) {
         throw new Error(`Actions should be plain functions: ${action}`);
     }
-    next();
+    next(action);
 };
 
 
@@ -65,7 +58,7 @@ export const createMachine = () => {
     const update = createUpdate(action => {
         state = action(state);
         listeners.forEach(listener => listener(state));
-    }, baseResolver);
+    }, baseMiddleware);
     // All done!
     return {getState, subscribe, update};
 };
@@ -75,32 +68,29 @@ export const createMachine = () => {
  * Merges the array of middleware into a single middleware
  * function.
  */
-export const reduceMiddleware = middleware => middleware.reduceRight((m1, m2) => (resolve, next, action) => m1(resolve, () => m2(resolve, next, action), action));
+export const reduceMiddleware = middlewareList => middlewareList.reduceRight((m2, m1) => (update, next) => m1(update, m2(update, next)));
 
 /**
  * Returns a new update function that will use the given
  * array of middleware to resolve actions.
  */
-export const applyMiddleware = (middleware, update) => createUpdate(update, reduceMiddleware(middleware));
+export const applyMiddleware = (middlewareList, update) => createUpdate(update._baseUpdate, reduceMiddleware([...middlewareList, update._middleware]));
 
 
 // Built-in middleware.
 
-export const iteratorMiddleware = (resolve, next, action) => isIterator(action) ? Array.from(action).forEach(resolve) : next();
+export const observableMiddleware = (update, next) => action => isObservable(action) ? action.forEach(update) : next(action);
 
-export const promiseMiddleware = (resolve, next, action) => isPromise(action) ? action.then(resolve) : next();
+export const promiseMiddleware = (update, next) => action => isPromise(action) ? action.then(update) : next(action);
 
-export const observableMiddleware = (resolve, next, action) => isObservable(action) ? action.forEach(resolve) : next();
+export const iteratorMiddleware = (update, next) => action => isIterator(action) ? Array.from(action, update) : next(action);
 
-export const defaultMiddleware = reduceMiddleware([iteratorMiddleware, promiseMiddleware, observableMiddleware]);
+export const defaultMiddleware = reduceMiddleware([observableMiddleware, promiseMiddleware, iteratorMiddleware]);
 
 
-/**
- * An action creator that will replace the existing state
- * with the new state.
- */
-export const replaceState = obj => () => obj;
+// Action creators.
 
+const mergeStateProperty = (oldValue, value) => isFunction(value) ? value(oldValue) : value;
 
 /**
  * An action creator that will merge the existing
@@ -111,7 +101,7 @@ export const replaceState = obj => () => obj;
  * of the state at that key to mutate the existing
  * value.
  */
-export const setState = obj => (state=EMPTY_RECORD) => createRecord(state, mapValues(obj, (value, key) => (isFunction(value) ? value(state[key]) : value)));
+export const setState = obj => state => freeze(assign(assign({}, state), obj, mergeStateProperty));
 
 
 /**
@@ -124,15 +114,16 @@ export const setState = obj => (state=EMPTY_RECORD) => createRecord(state, mapVa
  */
 export const bindActionCreators = (actionCreators, update) => {
     // Bind objects of action creators.
-    const {default: initializer, ...boundActionCreators} = mapValues(actionCreators, (actionCreator, key) => {
+    const boundActionCreators = mapValues(actionCreators, (actionCreator, key) => {
         // Bind action creators.
         if (isFunction(actionCreator)) {
             return (...args) => update(actionCreator(...args));
         }
         // Bind nested actions.
-        return bindActionCreators(actionCreator, createUpdate(action => update(setState({[key]: action})), update.resolver));
+        return bindActionCreators(actionCreator, createUpdate(action => update(setState({[key]: action})), update._middleware));
     });
     // Run the default action.
+    const {default: initializer} = boundActionCreators;
     if (isFunction(initializer)) {
         initializer();
     }
@@ -147,15 +138,15 @@ export const bindActionCreators = (actionCreators, update) => {
  *
  * This should be used in combination with iteratorMiddleware.
  */
-export const chainActions = (...actions) => actions[Symbol.iterator]();
+export const chainActions = (...actions) => actions.values();
 
 
 /**
  * Top-level API for creating a state machine application.
  */
-export const createApp = (actionCreators={}, middleware=[defaultMiddleware]) => {
+export const createApp = (actionCreators={}, middlewareList=[defaultMiddleware]) => {
     const {getState, subscribe, update: baseUpdate} = createMachine();
-    const update = applyMiddleware(middleware, baseUpdate);
+    const update = applyMiddleware(middlewareList, baseUpdate);
     const actions = bindActionCreators(actionCreators, update);
     return {getState, subscribe, update, actions};
 };
