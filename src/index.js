@@ -138,7 +138,7 @@ export const bindActionCreators = (actionCreators, update) => {
  *
  * This should be used in combination with iteratorMiddleware.
  */
-export const chainActions = (...actions) => actions.values();
+export const chainActions = (...actions) => actions[Symbol.iterator]();
 
 
 /**
