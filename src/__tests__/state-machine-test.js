@@ -1,149 +1,127 @@
 import expect from "expect.js";
-import {Observable} from "rx-lite";
-import constant from "lodash/utility/constant";
-import {createApp, bindActionCreators, setState, chainActions} from "../";
+import {createStore, applyMiddleware, applyActionCreators, createAsyncAction, asyncActionMiddleware, setState} from "../";
 
 
-let getState, subscribe, update, unsubscribe, history;
+describe("state-machine", () => {
 
-beforeEach(() => {
-    const app = createApp();
-    getState = app.getState;
-    subscribe = app.subscribe;
-    update = app.update;
-    history = [];
-    unsubscribe = subscribe(state => history.push(state));
-});
+    const actionCreators = {
+        initialize: () => setState({
+            foo: "foo"
+        }),
+        bar: {
+            initialize: () => setState({
+                baz: "baz"
+            }),
+            setBaz: baz => setState({baz}),
+            setBazAsync: baz => createAsyncAction((dispatch, getState) => {
+                expect(getState()).to.eql({baz: "baz"});
+                dispatch(setState({baz}));
+            })
+        }
+    };
 
+    const expectedInitialState = {
+        foo: "foo",
+        bar: {
+            baz: "baz"
+        }
+    };
 
-describe("getState", () => {
+    const stateWithFoo = {
+        foo: "FOO",
+        bar: {
+            baz: "baz"
+        }
+    };
 
-    it("provides a snapshot of current state", () => {
-        expect(getState()).to.eql(undefined);
-    });
+    const stateWithBaz = {
+        foo: "foo",
+        bar: {
+            baz: "BAZ"
+        }
+    };
 
-});
+    let getState, subscribe, dispatch, actions, history, unsubscribe;
 
-
-describe("subscribe", () => {
-
-    it("provides subscribers with initial state", () => {
-        expect(history).to.eql([undefined]);
-    });
-
-    it("notifies listeners of new state", () => {
-        update(constant("bar"));
-        expect(history).to.eql([undefined, "bar"]);
-    });
-
-    it("returns an unsubscribe function", () => {
-        unsubscribe();
-        update(constant("bar"));
-        expect(history).to.eql([undefined]);
-    });
-
-});
-
-
-describe("iteratorMiddleware", () => {
-
-    it("resolves iterators", () => {
-        update(chainActions(constant("foo"), constant("bar")));
-        expect(history).to.eql([undefined, "foo", "bar"]);
-    });
-
-});
-
-
-describe("promiseMiddleware", () => {
-
-    it("resolves promises", async () => {
-        const promise = Promise.resolve(constant("foo"));
-        update(promise);
-        await promise;
-        expect(history).to.eql([undefined, "foo"]);
-    });
-
-});
-
-
-describe("observableMiddleware", () => {
-
-    it("resolves observables", async () => {
-        const observable = Observable.of(constant("foo"), constant("bar"));
-        update(observable);
-        await observable.toPromise();
-        expect(history).to.eql([undefined, "foo", "bar"]);
-    });
-
-});
-
-
-describe("setState", () => {
-
-    it("allows state to be merged with existing state", () => {
-        update(setState({foo: "FOO"}));
-        update(setState({bar: "BAR"}));
-        expect(history).to.eql([undefined, {foo: "FOO"}, {foo: "FOO", bar: "BAR"}]);
-    });
-
-    it("overrides existing keys", () => {
-        update(setState({foo: "FOO"}));
-        update(setState({foo: "BAR"}));
-        expect(history).to.eql([undefined, {foo: "FOO"}, {foo: "BAR"}]);
-    });
-
-    it("allows keys to be merged with existing values", () => {
-        update(setState({foo: "FOO"}));
-        update(setState({foo: f => f + "2"}));
-        expect(history).to.eql([undefined, {foo: "FOO"}, {foo: "FOO2"}]);
-    });
-
-});
-
-
-describe("bound action creators", () => {
-
-    let actions;
     beforeEach(() => {
-        actions = bindActionCreators({
-            setFoo: v => setState({foo: v})
-        }, update);
+        const createStoreWithMiddleware = applyMiddleware(asyncActionMiddleware)(createStore);
+        const createStoreWithActions = applyActionCreators(actionCreators)(createStoreWithMiddleware);
+        const store = createStoreWithActions();
+        getState = store.getState;
+        subscribe = store.subscribe;
+        dispatch = store.dispatch;
+        actions = store.actions;
+        history = [];
+        unsubscribe = subscribe(state => history.push(state));
     });
 
-    it("runs the update function with the resolved action", () => {
-        actions.setFoo("FOO");
-        expect(history).to.eql([undefined, {foo: "FOO"}]);
+
+    describe("getState", () => {
+
+        it("provides a snapshot of current state", () => {
+            expect(getState()).to.eql(expectedInitialState);
+        });
+
     });
 
-});
 
+    describe("subscribe", () => {
 
-describe("nested bound action creators", () => {
+        it("provides subscribers with initial state", () => {
+            expect(history).to.eql([expectedInitialState]);
+        });
 
-    let actions;
-    beforeEach(() => {
-        actions = bindActionCreators({
-            nested: {
-                default: () => setState({foo: "FOO"}),
-                setFoo: v => setState({foo: v}),
-                setFooPromise: async v => setState({foo: v})
-            }
-        }, update);
+        it("notifies listeners of new state", () => {
+            dispatch(setState({foo: "FOO"}));
+            expect(history).to.eql([expectedInitialState, stateWithFoo]);
+        });
+
+        it("returns an unsubscribe function", () => {
+            unsubscribe();
+            dispatch(setState({foo: "FOO"}));
+            expect(history).to.eql([expectedInitialState]);
+        });
+
     });
 
-    it("sets default state", () => {
-        expect(history).to.eql([undefined, {nested: {foo: "FOO"}}]);
+
+    describe("asyncActionMiddleware", () => {
+
+        it("resolves async actions", () => {
+            dispatch(createAsyncAction(dispatch => dispatch(setState({foo: "FOO"}))));
+            expect(history).to.eql([expectedInitialState, stateWithFoo]);
+        });
+
     });
 
-    it("applies nested actions", () => {
-        actions.nested.setFoo("FOO2");
-        expect(history).to.eql([undefined, {nested: {foo: "FOO"}}, {nested: {foo: "FOO2"}}]);
+
+    describe("setState", () => {
+
+        it("allows state to be merged with existing state", () => {
+            dispatch(setState({foo: "FOO"}));
+            expect(history).to.eql([expectedInitialState, stateWithFoo]);
+        });
+
+        it("allows keys to be merged with existing values", () => {
+            dispatch(setState({foo: f => f.toUpperCase()}));
+            expect(history).to.eql([expectedInitialState, stateWithFoo]);
+        });
+
     });
 
-    it("resolves nested actions", async () => {
-        await actions.nested.setFooPromise("FOO2");
-        expect(history).to.eql([undefined, {nested: {foo: "FOO"}}, {nested: {foo: "FOO2"}}]);
+
+    describe("action", () => {
+
+        it("runs the dispatch function with the resolved action", () => {
+            actions.bar.setBaz("BAZ");
+            expect(history).to.eql([expectedInitialState, stateWithBaz]);
+        });
+
+        it("resolves async actions", () => {
+            actions.bar.setBazAsync("BAZ");
+            expect(history).to.eql([expectedInitialState, stateWithBaz]);
+        });
+
     });
 
 });

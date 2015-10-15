@@ -1,49 +1,58 @@
-import isFunction from "lodash/lang/isFunction";
-import pull from "lodash/array/pull";
-import assign from "lodash/object/assign";
-import mapValues from "lodash/object/mapValues";
+// General-purpose utilities.
 
-
+const assign = Object.assign;
 const freeze = Object.freeze;
+const keys = Object.keys;
+
+const mapValues = (obj, func) => keys(obj).reduce((o, key) => {
+    o[key] = func(obj[key], key);
+    return o;
+}, {});
 
 
 // Type detection utilities.
 
-const isObservable = value => value && isFunction(value.subscribe) && isFunction(value.forEach);
+const isFunction = value => typeof value === "function";
 
-const isPromise = value => value && isFunction(value.then);
-
-const isIterator = value => value && isFunction(value.next);
+const isAsyncAction = value => value && isFunction(value._asyncAction);
 
 
-const createUpdate = (baseUpdate, middleware) => {
-    const update = middleware(action => update(action), baseUpdate);
-    update._middleware = middleware;
-    update._baseUpdate = baseUpdate;
-    return update;
-};
+// Async actions.
+
+/**
+ * Creates an async action from the given function.
+ *
+ * The function must be of type ({getState, resolve, dispatch}) => action.
+ *
+ * This needs to be used in conjunction with asyncActionMiddleware.
+ */
+export const createAsyncAction = func => ({_asyncAction: func});
 
 
-const baseMiddleware = (update, next) => action => {
-    if (!isFunction(action)) {
-        throw new Error(`Actions should be plain functions: ${action}`);
+// Stores.
+
+const createUnsubscribe = (listeners, listener) => () => {
+    const index = listeners.indexOf(listener);
+    if (index != -1) {
+        listeners.splice(index, 1);
     }
-    next(action);
 };
 
+const defaultResolve = store => next => action => next(action);
 
 /**
  * Creates a wrapped state object and returns two functions for
  * interacting with it.
  *
+ * getState(): Returns a snapshot of the current state.
  * subscribe(listener): Will notify the listener on any change to the state,
  *     and immediately call the listener to notify of current state. Returns
  *     an unsubscribe function.
- * update(action): Mutates the state using the given action. An action is a
+ * dispatch(action): Mutates the state using the given action. An action is a
  *     function that is called with the current state, and returns the new
  *     state.
  */
-export const createMachine = () => {
+export const createStore = () => {
     let state;
     const getState = () => state;
     // Subscriptions management.
@@ -52,45 +61,51 @@ export const createMachine = () => {
         listeners.push(listener);
         listener(state);
         // The unsubscribe function.
-        return () => pull(listeners, listener);
+        return createUnsubscribe(listeners, listener);
     };
     // State management.
-    const update = createUpdate(action => {
+    const dispatch = action => {
+        if (!isFunction(action)) {
+            throw new Error(`Actions should be plain functions: ${action}`);
+        }
         state = action(state);
         listeners.forEach(listener => listener(state));
-    }, baseMiddleware);
+    };
     // All done!
-    return {getState, subscribe, update};
+    return {getState, subscribe, resolve: defaultResolve, dispatch};
 };
 
 
-/**
- * Merges the array of middleware into a single middleware
- * function.
- */
-export const reduceMiddleware = middlewareList => middlewareList.reduceRight((m2, m1) => (update, next) => m1(update, m2(update, next)));
+
+// Middleware.
 
 /**
- * Returns a new update function that will use the given
- * array of middleware to resolve actions.
+ * Middleware used to process actions created by
+ * createAsyncAction().
  */
-export const applyMiddleware = (middlewareList, update) => createUpdate(update._baseUpdate, reduceMiddleware([...middlewareList, update._middleware]));
+export const asyncActionMiddleware = ({dispatch, getState}) => next => action => isAsyncAction(action) ? action._asyncAction(dispatch, getState) : next(action);
 
+const enhanceStore = ({getState, resolve, dispatch: baseDispatch, ...store}) => {
+    const dispatch = resolve({getState, resolve, dispatch: action => dispatch(action)})(baseDispatch);
+    return {getState, resolve, dispatch, ...store};
+};
 
-// Built-in middleware.
+const reduceMiddleware = middlewareList => store => {
+    const boundMiddlewareList = middlewareList.map(m => m(store));
+    return next => boundMiddlewareList.reduceRight((m2, m1) => m1(m2), next);
+};
 
-export const observableMiddleware = (update, next) => action => isObservable(action) ? action.forEach(update) : next(action);
-
-export const promiseMiddleware = (update, next) => action => isPromise(action) ? action.then(update) : next(action);
-
-export const iteratorMiddleware = (update, next) => action => isIterator(action) ? Array.from(action, update) : next(action);
-
-export const defaultMiddleware = reduceMiddleware([observableMiddleware, promiseMiddleware, iteratorMiddleware]);
+/**
+ * Store enhancer that applies the given middleware.
+ */
+export const applyMiddleware = (...middlewareList) => createStore => (...args) => {
+    const {resolve: baseResolve, ...store} = createStore(...args);
+    const resolve = reduceMiddleware([...middlewareList, baseResolve]);
+    return enhanceStore({resolve, ...store});
+};
 
 
 // Action creators.
-
-const mergeStateProperty = (oldValue, value) => isFunction(value) ? value(oldValue) : value;
 
 /**
  * An action creator that will merge the existing
@@ -101,52 +116,53 @@ const mergeStateProperty = (oldValue, value) => isFunction(value) ? value(oldVal
  * of the state at that key to mutate the existing
  * value.
  */
-export const setState = obj => state => freeze(assign(assign({}, state), obj, mergeStateProperty));
+export const setState = obj => (state={}) => freeze(assign({}, state, mapValues(obj, (value, key) => isFunction(value) ? value(state[key]) : value)));
 
-
-/**
- * Recursively binds an object of action creators to the
- * given update function.
- *
- * If the object of action creators contains a "default"
- * key, then that action creator will be called automatically
- * to set initial state.
- */
-export const bindActionCreators = (actionCreators, update) => {
-    // Bind objects of action creators.
-    const boundActionCreators = mapValues(actionCreators, (actionCreator, key) => {
-        // Bind action creators.
-        if (isFunction(actionCreator)) {
-            return (...args) => update(actionCreator(...args));
-        }
-        // Bind nested actions.
-        return bindActionCreators(actionCreator, createUpdate(action => update(setState({[key]: action})), update._middleware));
-    });
-    // Run the default action.
-    const {default: initializer} = boundActionCreators;
-    if (isFunction(initializer)) {
-        initializer();
-    }
-    // All done!
-    return boundActionCreators;
+const bindActionCreator = (actionCreator, dispatch) => (...args) => {
+    const action = actionCreator(...args);
+    dispatch(action);
+    return action;
 };
 
+const createNestedGetState = (getState, key) => () => (getState() || {})[key];
+
+const createNestedDispatch = (dispatch, key) => action => dispatch(setState({[key]: action}));
+
+const bindActionCreators = (actionCreators, {getState, dispatch, ...store}) => {
+    // Bind objects of action creators.
+    const actions = mapValues(actionCreators, (actionCreator, key) => {
+        // Bind action creators.
+        if (isFunction(actionCreator)) {
+            return bindActionCreator(actionCreator, dispatch);
+        }
+        // Bind nested actions.
+        return bindActionCreators(actionCreator, enhanceStore({
+            getState: createNestedGetState(getState, key),
+            dispatch: createNestedDispatch(dispatch, key),
+            ...store
+        }));
+    });
+    // Run the default action.
+    const {initialize} = actions;
+    if (isFunction(initialize)) {
+        initialize();
+    }
+    // All done!
+    return actions;
+};
 
 /**
- * An action helper that returns an iterator of the
- * given actions.
+ * Store enhancer that recursively binds an object of action creators to the
+ * given store.
  *
- * This should be used in combination with iteratorMiddleware.
+ * If the object of action creators contains a "initialize"
+ * key, then that action creator will be called automatically
+ * to set initial state.
+ *
+ * The returned store will have an "actions" property.
  */
-export const chainActions = (...actions) => actions[Symbol.iterator]();
-
-
-/**
- * Top-level API for creating a state machine application.
- */
-export const createApp = (actionCreators={}, middlewareList=[defaultMiddleware]) => {
-    const {getState, subscribe, update: baseUpdate} = createMachine();
-    const update = applyMiddleware(middlewareList, baseUpdate);
-    const actions = bindActionCreators(actionCreators, update);
-    return {getState, subscribe, update, actions};
+export const applyActionCreators = actionCreators => createStore => (...args) => {
+    const store = createStore(...args);
+    const actions = bindActionCreators(actionCreators, store);
+    return {actions, ...store};
 };
