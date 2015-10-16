@@ -76,6 +76,11 @@ describe("state-machine", () => {
             expect(history).to.eql([expectedInitialState, stateWithFoo]);
         });
 
+        it("does not notify listeners of identical state", () => {
+            dispatch(state => state);
+            expect(history).to.eql([expectedInitialState]);
+        });
+
         it("returns an unsubscribe function", () => {
             unsubscribe();
             dispatch(setState({foo: "FOO"}));
@@ -89,6 +94,14 @@ describe("state-machine", () => {
 
         it("resolves async actions", () => {
             dispatch(createAsyncAction(dispatch => dispatch(setState({foo: "FOO"}))));
+            expect(history).to.eql([expectedInitialState, stateWithFoo]);
+        });
+
+        it("debounces multiple synchronous calls to dispatch", () => {
+            dispatch(createAsyncAction(dispatch => {
+                dispatch(setState({foo: "bar"}));
+                dispatch(setState({foo: "FOO"}));
+            }));
             expect(history).to.eql([expectedInitialState, stateWithFoo]);
         });
 

@@ -53,6 +53,8 @@ const defaultResolve = store => next => action => next(action);
  *     state.
  */
 export const createStore = () => {
+    let debounced = 0;
+    // Wrapped state.
     let state;
     const getState = () => state;
     // Subscriptions management.
@@ -63,16 +65,34 @@ export const createStore = () => {
         // The unsubscribe function.
         return createUnsubscribe(listeners, listener);
     };
+    const notify = (initialState, newState) => {
+        // Only update the listeners if we've finished debouncing and the state has actually changed.
+        if (newState !== initialState && debounced === 0) {
+            listeners.forEach(listener => listener(state));
+        }
+    };
     // State management.
     const dispatch = action => {
         if (!isFunction(action)) {
             throw new Error(`Actions should be plain functions: ${action}`);
         }
+        const initialState = state;
         state = action(state);
-        listeners.forEach(listener => listener(state));
+        notify(initialState, state);
+    };
+    // Debounced dispatch.
+    const debounce = func => (...args) => {
+        const initialState = state;
+        debounced += 1;
+        try {
+            return func(...args);
+        } finally {
+            debounced -= 1;
+            notify(initialState, state);
+        }
     };
     // All done!
-    return {getState, subscribe, resolve: defaultResolve, dispatch};
+    return {getState, subscribe, resolve: defaultResolve, dispatch, debounce};
 };
 
 
@@ -83,11 +103,11 @@ export const createStore = () => {
  * Middleware used to process actions created by
  * createAsyncAction().
  */
-export const asyncActionMiddleware = ({dispatch, getState}) => next => action => isAsyncAction(action) ? action._asyncAction(dispatch, getState) : next(action);
+export const asyncActionMiddleware = ({getState, dispatch, debounce}) => next => action => isAsyncAction(action) ? debounce(action._asyncAction)(dispatch, getState) : next(action);
 
-const enhanceStore = ({getState, resolve, dispatch: baseDispatch, ...store}) => {
-    const dispatch = resolve({getState, resolve, dispatch: action => dispatch(action)})(baseDispatch);
-    return {getState, resolve, dispatch, ...store};
+const enhanceStore = ({getState, resolve, dispatch: baseDispatch, debounce, ...store}) => {
+    const dispatch = resolve({getState, resolve, dispatch: action => dispatch(action), debounce})(baseDispatch);
+    return {getState, resolve, dispatch, debounce, ...store};
 };
 
 const reduceMiddleware = middlewareList => store => {
