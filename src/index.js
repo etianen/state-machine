@@ -48,9 +48,15 @@ const defaultResolve = store => next => action => next(action);
  * subscribe(listener): Will notify the listener on any change to the state,
  *     and immediately call the listener to notify of current state. Returns
  *     an unsubscribe function.
+ * resolve(store)(next)(action): A middleware function representing the entire
+ *     middleware chain being used by the store. Use this to chain further
+ *     middleware, or resolve nested actions.
  * dispatch(action): Mutates the state using the given action. An action is a
  *     function that is called with the current state, and returns the new
  *     state.
+ * debounce(func): Wraps the given function so that, for the duration of it's
+ *     call, any number of synchronous calls to dispatch will only result in
+ *     a single notification sent to subscribers.
  */
 export const createStore = () => {
     let debounced = 0;
