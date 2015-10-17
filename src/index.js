@@ -4,9 +4,9 @@ const assign = Object.assign;
 const freeze = Object.freeze;
 const keys = Object.keys;
 
-const mapValues = (obj, func) => keys(obj).reduce((o, key) => {
-    o[key] = func(obj[key], key);
-    return o;
+const mapValues = (src, func) => keys(src).reduce((dst, key) => {
+    dst[key] = func(src[key], key);
+    return dst;
 }, {});
 
 
@@ -14,31 +14,8 @@ const mapValues = (obj, func) => keys(obj).reduce((o, key) => {
 
 const isFunction = value => typeof value === "function";
 
-const isAsyncAction = value => value && isFunction(value._asyncAction);
-
-
-// Async actions.
-
-/**
- * Creates an async action from the given function.
- *
- * The function must be of type ({getState, resolve, dispatch}) => action.
- *
- * This needs to be used in conjunction with asyncActionMiddleware.
- */
-export const createAsyncAction = func => ({_asyncAction: func});
-
 
 // Stores.
-
-const createUnsubscribe = (listeners, listener) => () => {
-    const index = listeners.indexOf(listener);
-    if (index != -1) {
-        listeners.splice(index, 1);
-    }
-};
-
-const defaultResolve = store => next => action => next(action);
 
 /**
  * Creates a wrapped state object and returns two functions for
@@ -48,18 +25,10 @@ const defaultResolve = store => next => action => next(action);
  * subscribe(listener): Will notify the listener on any change to the state,
  *     and immediately call the listener to notify of current state. Returns
  *     an unsubscribe function.
- * resolve(store)(next)(action): A middleware function representing the entire
- *     middleware chain being used by the store. Use this to chain further
- *     middleware, or resolve nested actions.
  * dispatch(action): Mutates the state using the given action. An action is a
- *     function that is called with the current state, and returns the new
- *     state.
- * debounce(func): Wraps the given function so that, for the duration of it's
- *     call, any number of synchronous calls to dispatch will only result in
- *     a single notification sent to subscribers.
+ *     function of type (state, dispatch, getState) => state.
  */
 export const createStore = () => {
-    let debounced = 0;
     // Wrapped state.
     let state;
     const getState = () => state;
@@ -69,65 +38,34 @@ export const createStore = () => {
         listeners.push(listener);
         listener(state);
         // The unsubscribe function.
-        return createUnsubscribe(listeners, listener);
-    };
-    const notify = (initialState, newState) => {
-        // Only update the listeners if we've finished debouncing and the state has actually changed.
-        if (newState !== initialState && debounced === 0) {
-            listeners.forEach(listener => listener(state));
-        }
+        return () => {
+            const index = listeners.indexOf(listener);
+            if (index != -1) {
+                listeners.splice(index, 1);
+            }
+        };
     };
     // State management.
+    let dispatchDepth = 0;
     const dispatch = action => {
         if (!isFunction(action)) {
             throw new Error(`Actions should be plain functions: ${action}`);
         }
         const initialState = state;
-        state = action(state);
-        notify(initialState, state);
-    };
-    // Debounced dispatch.
-    const debounce = func => (...args) => {
-        const initialState = state;
-        debounced += 1;
+        // Run the action.
+        dispatchDepth += 1;
         try {
-            return func(...args);
+            state = action(state, dispatch, getState);
         } finally {
-            debounced -= 1;
-            notify(initialState, state);
+            dispatchDepth -= 1;
+        }
+        // Only update the listeners if we've finished dispatching and the state has actually changed.
+        if (state !== initialState && dispatchDepth === 0) {
+            listeners.forEach(listener => listener(state));
         }
     };
     // All done!
-    return {getState, subscribe, resolve: defaultResolve, dispatch, debounce};
-};
-
-
-
-// Middleware.
-
-/**
- * Middleware used to process actions created by
- * createAsyncAction().
- */
-export const asyncActionMiddleware = ({getState, dispatch, debounce}) => next => action => isAsyncAction(action) ? debounce(action._asyncAction)(dispatch, getState) : next(action);
-
-const enhanceStore = ({getState, resolve, dispatch: baseDispatch, debounce, ...store}) => {
-    const dispatch = resolve({getState, resolve, dispatch: action => dispatch(action), debounce})(baseDispatch);
-    return {getState, resolve, dispatch, debounce, ...store};
-};
-
-const reduceMiddleware = middlewareList => store => {
-    const boundMiddlewareList = middlewareList.map(m => m(store));
-    return next => boundMiddlewareList.reduceRight((m2, m1) => m1(m2), next);
-};
-
-/**
- * Store enhancer that applies the given middleware.
- */
-export const applyMiddleware = (...middlewareList) => createStore => (...args) => {
-    const {resolve: baseResolve, ...store} = createStore(...args);
-    const resolve = reduceMiddleware([...middlewareList, baseResolve]);
-    return enhanceStore({resolve, ...store});
+    return {getState, subscribe, dispatch};
 };
 
 
@@ -138,57 +76,79 @@ export const applyMiddleware = (...middlewareList) => createStore => (...args) =
  * state with the new state.
  *
  * If any of the keys of the new state are actions,
- * then they will be called with the previous value
- * of the state at that key to mutate the existing
- * value.
+ * they will be dispatched with the value of the nested state.
  */
-export const setState = obj => (state={}) => freeze(assign({}, state, mapValues(obj, (value, key) => isFunction(value) ? value(state[key]) : value)));
-
-const bindActionCreator = (actionCreator, dispatch) => (...args) => {
-    const action = actionCreator(...args);
-    dispatch(action);
-    return action;
-};
-
-const createNestedGetState = (getState, key) => () => (getState() || {})[key];
-
-const createNestedDispatch = (dispatch, key) => action => dispatch(setState({[key]: action}));
-
-const bindActionCreators = (actionCreators, {getState, dispatch, ...store}) => {
-    // Bind objects of action creators.
-    const actions = mapValues(actionCreators, (actionCreator, key) => {
-        // Bind action creators.
-        if (isFunction(actionCreator)) {
-            return bindActionCreator(actionCreator, dispatch);
-        }
-        // Bind nested actions.
-        return bindActionCreators(actionCreator, enhanceStore({
-            getState: createNestedGetState(getState, key),
-            dispatch: createNestedDispatch(dispatch, key),
-            ...store
-        }));
-    });
-    // Run the default action.
-    const {initialize} = actions;
-    if (isFunction(initialize)) {
-        initialize();
+export const setState = obj => (state={}, dispatch, getState) => freeze({...state, ...mapValues(obj, (value, key) => {
+    if (isFunction(value)) {
+        const nestedDispatch = action => dispatch(setState({[key]: action}));
+        const nestedGetState = () => getState()[key];
+        return value(state[key], nestedDispatch, nestedGetState);
     }
-    // All done!
-    return actions;
+    return value;
+})});
+
+/**
+ * Creates an async action from the given function.
+ *
+ * The function must be of type (dispatch, getState) => undefined.
+ */
+export const createAsyncAction = func => (state, dispatch, getState) => {
+    func(dispatch, getState);
+    return getState();
 };
 
 /**
- * Store enhancer that recursively binds an object of action creators to the
- * given store.
- *
- * If the object of action creators contains a "initialize"
- * key, then that action creator will be called automatically
- * to set initial state.
- *
- * The returned store will have an "actions" property.
+ * Reduces the actions into a single action.
  */
-export const applyActionCreators = actionCreators => createStore => (...args) => {
-    const store = createStore(...args);
-    const actions = bindActionCreators(actionCreators, store);
-    return {actions, ...store};
+export const reduceActions = (...actions) => actions.reduce((ac2, ac1) => (state, dispatch, getState) => ac1(ac2(state, dispatch, getState), dispatch, getState));
+
+
+// Action creator utilities.
+
+/**
+ * Maps the given function over all action creators,
+ * descending deeply into nested action creators.
+ *
+ * The function should be of type (actionCreator, keyPath) => value.
+ */
+export const mapActionCreators = (actionCreators, func, keyPath=[]) => {
+    if (isFunction(actionCreators)) {
+        return func(actionCreators, keyPath);
+    }
+    return mapValues(actionCreators, (actionCreator, key) => mapActionCreators(actionCreator, func, keyPath.concat([key])));
+};
+
+/**
+ * Binds the given action creators to call dispatch with their
+ * action when invoked.
+ *
+ * Any nested action creators with the name "initialize" will
+ * be automatically invoked to set up initial state.
+ */
+export const bindActionCreators = (actionCreators, dispatch) => mapActionCreators(actionCreators, (actionCreator, keyPath) => {
+    const nestedDispatcher = keyPath.slice(0, keyPath.length - 1).reduce((d, key) => action => d(setState({[key]: action})), dispatch);
+    const boundActionCreator = (...args) => nestedDispatcher(actionCreator(...args));
+    // Run the action creator now if it's an initializer.
+    if (keyPath[keyPath.length - 1] === "initialize") {
+        boundActionCreator();
+    }
+    return boundActionCreator;
+});
+
+/**
+ * Reduces the action creators into a single action creator.
+ *
+ * The action creators can be action creator functions, or objects
+ * of nested action creators.
+ */
+export const reduceActionCreators = (...actionCreatorsList) => {
+    // Combine multiple functions into a single reduced action creator.
+    if (actionCreatorsList.every(isFunction)) {
+        const reducedActionCreator = (...args) => reduceActions(...actionCreatorsList.map(actionCreator => actionCreator(...args)));
+        // Preserve function annotations.
+        assign(reducedActionCreator, ...actionCreatorsList);
+        return reducedActionCreator;
+    }
+    // Merge nested action creators.
+    return actionCreatorsList.reduce((dst, src) => ({...dst, ...mapValues(src, (actionCreator, key) => dst[key] ? reduceActionCreators(dst[key], actionCreator) : actionCreator)}));
 };

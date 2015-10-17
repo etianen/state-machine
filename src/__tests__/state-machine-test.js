@@ -1,10 +1,10 @@
 import expect from "expect.js";
-import {createStore, applyMiddleware, applyActionCreators, createAsyncAction, asyncActionMiddleware, setState} from "../";
+import {createStore, bindActionCreators, setState, createAsyncAction, reduceActions, reduceActionCreators} from "../";
 
 
 describe("state-machine", () => {
 
-    const actionCreators = {
+    const actionCreators = reduceActionCreators({
         initialize: () => setState({
             foo: "foo"
         }),
@@ -13,14 +13,19 @@ describe("state-machine", () => {
                 baz: "baz"
             }),
             setBaz: baz => setState({baz}),
+            setBazReduced: baz => setState({baz: undefined})
+        }
+    }, {
+        bar: {
+            setBazReduced: baz => setState({baz}),
             setBazAsync: baz => createAsyncAction((dispatch, getState) => {
                 expect(getState()).to.eql({baz: "baz"});
                 dispatch(setState({baz}));
             })
         }
-    };
+    });
 
-    const expectedInitialState = {
+    const initialState = {
         foo: "foo",
         bar: {
             baz: "baz"
@@ -44,13 +49,11 @@ describe("state-machine", () => {
     let getState, subscribe, dispatch, actions, history, unsubscribe;
 
     beforeEach(() => {
-        const createStoreWithMiddleware = applyMiddleware(asyncActionMiddleware)(createStore);
-        const createStoreWithActions = applyActionCreators(actionCreators)(createStoreWithMiddleware);
-        const store = createStoreWithActions();
+        const store = createStore();
         getState = store.getState;
         subscribe = store.subscribe;
         dispatch = store.dispatch;
-        actions = store.actions;
+        actions = bindActionCreators(actionCreators, dispatch);
         history = [];
         unsubscribe = subscribe(state => history.push(state));
     });
@@ -59,7 +62,7 @@ describe("state-machine", () => {
     describe("getState", () => {
 
         it("provides a snapshot of current state", () => {
-            expect(getState()).to.eql(expectedInitialState);
+            expect(getState()).to.eql(initialState);
         });
 
     });
@@ -68,41 +71,23 @@ describe("state-machine", () => {
     describe("subscribe", () => {
 
         it("provides subscribers with initial state", () => {
-            expect(history).to.eql([expectedInitialState]);
+            expect(history).to.eql([initialState]);
         });
 
         it("notifies listeners of new state", () => {
             dispatch(setState({foo: "FOO"}));
-            expect(history).to.eql([expectedInitialState, stateWithFoo]);
+            expect(history).to.eql([initialState, stateWithFoo]);
         });
 
         it("does not notify listeners of identical state", () => {
             dispatch(state => state);
-            expect(history).to.eql([expectedInitialState]);
+            expect(history).to.eql([initialState]);
         });
 
         it("returns an unsubscribe function", () => {
             unsubscribe();
             dispatch(setState({foo: "FOO"}));
-            expect(history).to.eql([expectedInitialState]);
-        });
-
-    });
-
-
-    describe("asyncActionMiddleware", () => {
-
-        it("resolves async actions", () => {
-            dispatch(createAsyncAction(dispatch => dispatch(setState({foo: "FOO"}))));
-            expect(history).to.eql([expectedInitialState, stateWithFoo]);
-        });
-
-        it("debounces multiple synchronous calls to dispatch", () => {
-            dispatch(createAsyncAction(dispatch => {
-                dispatch(setState({foo: "bar"}));
-                dispatch(setState({foo: "FOO"}));
-            }));
-            expect(history).to.eql([expectedInitialState, stateWithFoo]);
+            expect(history).to.eql([initialState]);
         });
 
     });
@@ -112,29 +97,78 @@ describe("state-machine", () => {
 
         it("allows state to be merged with existing state", () => {
             dispatch(setState({foo: "FOO"}));
-            expect(history).to.eql([expectedInitialState, stateWithFoo]);
+            expect(history).to.eql([initialState, stateWithFoo]);
         });
 
         it("allows keys to be merged with existing values", () => {
             dispatch(setState({foo: f => f.toUpperCase()}));
-            expect(history).to.eql([expectedInitialState, stateWithFoo]);
+            expect(history).to.eql([initialState, stateWithFoo]);
         });
 
     });
 
 
-    describe("action", () => {
+    describe("reduced action", () => {
+
+        it("runs multiple actions in the order declared", () => {
+            dispatch(reduceActions(
+                setState({foo: undefined}),
+                setState({foo: undefined}),
+                setState({foo: "FOO"})
+            ));
+            expect(history).to.eql([initialState, stateWithFoo]);
+        });
+
+    });
+
+
+    describe("async action", () => {
+
+        it("provides a dispatch function", () => {
+            dispatch(createAsyncAction(dispatch => dispatch(setState({foo: "FOO"}))));
+            expect(history).to.eql([initialState, stateWithFoo]);
+        });
+
+        it("provides a getState function", () => {
+            dispatch(createAsyncAction((dispatch, getState) => {
+                expect(getState()).to.eql(initialState);
+            }));
+        });
+
+        it("debounces multiple synchronous calls to dispatch", () => {
+            dispatch(createAsyncAction(dispatch => {
+                dispatch(setState({foo: "bar"}));
+                dispatch(setState({foo: "FOO"}));
+            }));
+            expect(history).to.eql([initialState, stateWithFoo]);
+        });
+
+    });
+
+
+    describe("nested action", () => {
 
         it("runs the dispatch function with the resolved action", () => {
             actions.bar.setBaz("BAZ");
-            expect(history).to.eql([expectedInitialState, stateWithBaz]);
+            expect(history).to.eql([initialState, stateWithBaz]);
         });
 
-        it("resolves async actions", () => {
+        it("runs async actions", () => {
             actions.bar.setBazAsync("BAZ");
-            expect(history).to.eql([expectedInitialState, stateWithBaz]);
+            expect(history).to.eql([initialState, stateWithBaz]);
         });
 
     });
+
+
+    describe("reduceActionCreators", () => {
+
+        it("runs reduced action creators in the order declared", () => {
+            actions.bar.setBazReduced("BAZ");
+            expect(history).to.eql([initialState, stateWithBaz]);
+        });
+
+    });
+
 
 });
