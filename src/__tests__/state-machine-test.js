@@ -9,40 +9,50 @@ describe("state-machine", () => {
             foo: "foo"
         }),
         bar: {
-            initialize: () => setState({
-                baz: "baz"
-            }),
-            setBaz: baz => setState({baz}),
-            setBazReduced: baz => setState({baz: undefined})
+            qux: {
+                initialize: () => setState({
+                    norf: "norf"
+                }),
+                setNorf: norf => setState({norf}),
+                setNorfReduced: norf => setState({norf: undefined})
+            }
         }
     }, {
         bar: {
-            setBazReduced: baz => setState({baz}),
-            setBazAsync: baz => createAsyncAction((dispatch, getState) => {
-                expect(getState()).to.eql({baz: "baz"});
-                dispatch(setState({baz}));
-            })
+            qux: {
+                setNorfReduced: norf => setState({norf}),
+                setNorfAsync: norf => createAsyncAction((dispatch, getState) => {
+                    expect(getState()).to.eql({norf: "norf"});
+                    dispatch(setState({norf}));
+                })
+            }
         }
     });
 
     const initialState = {
         foo: "foo",
         bar: {
-            baz: "baz"
+            qux: {
+                norf: "norf"
+            }
         }
     };
 
     const stateWithFoo = {
         foo: "FOO",
         bar: {
-            baz: "baz"
+            qux: {
+                norf: "norf"
+            }
         }
     };
 
-    const stateWithBaz = {
+    const stateWithNorf = {
         foo: "foo",
         bar: {
-            baz: "BAZ"
+            qux: {
+                norf: "NORF"
+            }
         }
     };
 
@@ -149,13 +159,13 @@ describe("state-machine", () => {
     describe("nested action", () => {
 
         it("runs the dispatch function with the resolved action", () => {
-            actions.bar.setBaz("BAZ");
-            expect(history).to.eql([initialState, stateWithBaz]);
+            actions.bar.qux.setNorf("NORF");
+            expect(history).to.eql([initialState, stateWithNorf]);
         });
 
         it("runs async actions", () => {
-            actions.bar.setBazAsync("BAZ");
-            expect(history).to.eql([initialState, stateWithBaz]);
+            actions.bar.qux.setNorfAsync("NORF");
+            expect(history).to.eql([initialState, stateWithNorf]);
         });
 
     });
@@ -164,8 +174,8 @@ describe("state-machine", () => {
     describe("reduceActionCreators", () => {
 
         it("runs reduced action creators in the order declared", () => {
-            actions.bar.setBazReduced("BAZ");
-            expect(history).to.eql([initialState, stateWithBaz]);
+            actions.bar.qux.setNorfReduced("NORF");
+            expect(history).to.eql([initialState, stateWithNorf]);
         });
 
     });
