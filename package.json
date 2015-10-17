@@ -1,6 +1,6 @@
 {
   "name": "@etianen/state-machine",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Immutable state management for javascript clients and servers.",
   "main": "lib/index.js",
   "scripts": {
