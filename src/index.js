@@ -106,40 +106,28 @@ export const reduceActions = (...actions) => actions.reduce((ac2, ac1) => (state
 // Action creator utilities.
 
 /**
- * Maps the given function over all action creators,
- * descending deeply into nested action creators.
- *
- * The function should be of type (actionCreator, keyPath) => value.
- */
-export const mapActionCreators = (actionCreators, func, keyPath=[]) => {
-    if (isFunction(actionCreators)) {
-        return func(actionCreators, keyPath);
-    }
-    return mapValues(actionCreators, (actionCreator, key) => mapActionCreators(actionCreator, func, keyPath.concat([key])));
-};
-
-/**
  * Binds the given action creators to call dispatch with their
  * action when invoked.
  *
- * Any nested action creators with the name "initialize" will
+ * Any action creators with the name "initialize" will
  * be automatically invoked to set up initial state.
  */
-export const bindActionCreators = (actionCreators, dispatch) => mapActionCreators(actionCreators, (actionCreator, keyPath) => {
-    const nestedDispatcher = keyPath.slice(0, keyPath.length - 1).reduce((d, key) => action => d(setState({[key]: action})), dispatch);
-    const boundActionCreator = (...args) => nestedDispatcher(actionCreator(...args));
-    // Run the action creator now if it's an initializer.
-    if (keyPath[keyPath.length - 1] === "initialize") {
-        boundActionCreator();
+export const bindActionCreators = (actionCreators, dispatch) => {
+    const actions = mapValues(actionCreators, (actionCreator, key) => {
+        if (isFunction(actionCreator)) {
+            return (...args) => dispatch(actionCreator(...args));
+        }
+        return bindActionCreators(actionCreator, action => dispatch(setState({[key]: action})));
+    });
+    const {initialize} = actions;
+    if (isFunction(initialize)) {
+        initialize();
     }
-    return boundActionCreator;
-});
+    return actions;
+};
 
 /**
  * Reduces the action creators into a single action creator.
- *
- * The action creators can be action creator functions, or objects
- * of nested action creators.
  */
 export const reduceActionCreators = (...actionCreatorsList) => {
     // Combine multiple functions into a single reduced action creator.
