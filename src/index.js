@@ -80,14 +80,19 @@ export const createStore = () => {
  * If any of the keys of the new state are actions,
  * they will be dispatched with the value of the nested state.
  */
-export const setState = obj => (state={}, dispatch, getState) => freeze(assign(create(getPrototypeOf(state)), state, mapValues(obj, (value, key) => {
-    if (isFunction(value)) {
-        const nestedDispatch = action => dispatch(setState({[key]: action}));
-        const nestedGetState = () => getState()[key];
-        return value(state[key], nestedDispatch, nestedGetState);
-    }
-    return value;
-})));
+export const setState = (obj, selectors={}) => (state={}, dispatch, getState) => {
+    const proto = freeze({...getPrototypeOf(state), ...mapValues(selectors, selector => function () {
+        return selector(this);
+    })});
+    return freeze(assign(create(proto), state, mapValues(obj, (value, key) => {
+        if (isFunction(value)) {
+            const nestedDispatch = action => dispatch(setState({[key]: action}));
+            const nestedGetState = () => getState()[key];
+            return value(state[key], nestedDispatch, nestedGetState);
+        }
+        return value;
+    })));
+};
 
 /**
  * Creates an async action from the given function.

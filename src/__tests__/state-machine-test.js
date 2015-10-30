@@ -115,6 +115,23 @@ describe("state-machine", () => {
             expect(history).to.eql([initialState, stateWithFoo]);
         });
 
+        it("allows selectors to be appled to the state", () => {
+            dispatch(setState({}, {
+                getFooUpper: state => state.foo.toUpperCase()
+            }));
+            expect(history).to.eql([initialState, initialState]);
+            expect(history[1].getFooUpper()).to.be("FOO");
+        });
+
+        it("preserves existing state selectors", () => {
+            dispatch(setState({}, {
+                getFooUpper: state => state.foo.toUpperCase()
+            }));
+            dispatch(setState({}));
+            expect(history).to.eql([initialState, initialState, initialState]);
+            expect(history[1].getFooUpper()).to.be("FOO");
+        });
+
     });
 
 
