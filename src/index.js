@@ -1,5 +1,7 @@
 // General-purpose utilities.
 
+const getPrototypeOf = Object.getPrototypeOf;
+const create = Object.create;
 const assign = Object.assign;
 const freeze = Object.freeze;
 const keys = Object.keys;
@@ -78,14 +80,14 @@ export const createStore = () => {
  * If any of the keys of the new state are actions,
  * they will be dispatched with the value of the nested state.
  */
-export const setState = obj => (state={}, dispatch, getState) => freeze({...state, ...mapValues(obj, (value, key) => {
+export const setState = obj => (state={}, dispatch, getState) => freeze(assign(create(getPrototypeOf(state)), state, mapValues(obj, (value, key) => {
     if (isFunction(value)) {
         const nestedDispatch = action => dispatch(setState({[key]: action}));
         const nestedGetState = () => getState()[key];
         return value(state[key], nestedDispatch, nestedGetState);
     }
     return value;
-})});
+})));
 
 /**
  * Creates an async action from the given function.
