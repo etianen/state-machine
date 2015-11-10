@@ -1,10 +1,10 @@
-// General-purpose utilities.
-
-const getPrototypeOf = Object.getPrototypeOf;
+const keys = Object.keys;
 const create = Object.create;
 const assign = Object.assign;
 const freeze = Object.freeze;
-const keys = Object.keys;
+
+
+// General-purpose utilities.
 
 const mapValues = (src, func) => keys(src).reduce((dst, key) => {
     dst[key] = func(src[key], key);
@@ -12,9 +12,36 @@ const mapValues = (src, func) => keys(src).reduce((dst, key) => {
 }, {});
 
 
+// Records.
+
+const STATE_NAMESPACE = "$$state";
+
+const EMPTY_CACHE = {};
+
+/**
+ * Creates an immutable state object.
+ */
+export const createState = (props, selectors={}) => {
+    const proto = create(null, mapValues(selectors, (selector, key) => {
+        let cache = EMPTY_CACHE;
+        return {
+            get: function() {
+                return cache === EMPTY_CACHE ? cache = selector(this) : cache;
+            },
+            enumerable: true
+        };
+    }));
+    proto[STATE_NAMESPACE] = {selectors};
+    // Create the record with the props.
+    return freeze(assign(create(freeze(proto)), props));
+};
+
+
 // Type detection utilities.
 
 const isFunction = value => typeof value === "function";
+
+export const isState = value => value && value[STATE_NAMESPACE];
 
 
 // Stores.
@@ -73,6 +100,8 @@ export const createStore = () => {
 
 // Action creators.
 
+const EMPTY_STATE = createState();
+
 /**
  * An action creator that will merge the existing
  * state with the new state.
@@ -80,18 +109,17 @@ export const createStore = () => {
  * If any of the keys of the new state are actions,
  * they will be dispatched with the value of the nested state.
  */
-export const setState = (obj, selectors={}) => (state={}, dispatch, getState) => {
-    const proto = freeze({...getPrototypeOf(state), ...mapValues(selectors, selector => function () {
-        return selector(this);
-    })});
-    return freeze(assign(create(proto), state, mapValues(obj, (value, key) => {
+export const setState = (obj, selectors={}) => (state=EMPTY_STATE, dispatch, getState) => {
+    const mergedSelectors = isState(state) ? {...state[STATE_NAMESPACE].selectors, ...selectors} : selectors;
+    const mergedProps = {...state, ...mapValues(obj, (value, key) => {
         if (isFunction(value)) {
             const nestedDispatch = action => dispatch(setState({[key]: action}));
             const nestedGetState = () => getState()[key];
             return value(state[key], nestedDispatch, nestedGetState);
         }
         return value;
-    })));
+    })};
+    return createState(mergedProps, mergedSelectors);
 };
 
 /**
