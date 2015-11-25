@@ -164,6 +164,8 @@ export const bindActionCreators = (actionCreators, dispatch) => {
     return actions;
 };
 
+const reduceActionCreatorsAccumulator = (dst, src) => assign(dst, mapValues(src, (actionCreator, key) => dst[key] ? reduceActionCreators(dst[key], actionCreator) : actionCreator));
+
 /**
  * Reduces the action creators into a single action creator.
  */
@@ -176,5 +178,5 @@ export const reduceActionCreators = (...actionCreatorsList) => {
         return reducedActionCreator;
     }
     // Merge nested action creators.
-    return actionCreatorsList.reduce((dst, src) => ({...dst, ...mapValues(src, (actionCreator, key) => dst[key] ? reduceActionCreators(dst[key], actionCreator) : actionCreator)}));
+    return actionCreatorsList.reduce(reduceActionCreatorsAccumulator, {});
 };
