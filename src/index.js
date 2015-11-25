@@ -133,14 +133,16 @@ export const setState = (obj, selectors={}) => (state=EMPTY_STATE, dispatch, get
  * The function must be of type (dispatch, getState, rootDispatch, rootGetState) => undefined.
  */
 export const createAsyncAction = func => (state, dispatch, getState, rootDispatch, rootGetState) => {
-    func(dispatch, getState);
+    func(dispatch, getState, rootDispatch, rootGetState);
     return getState();
 };
+
+const reduceActionsAccumulator = (ac2, ac1) => (state, dispatch, getState, rootDispatch, rootGetState) => ac1(ac2(state, dispatch, getState, rootDispatch, rootGetState), dispatch, getState, rootDispatch, rootGetState);
 
 /**
  * Reduces the actions into a single action.
  */
-export const reduceActions = (...actions) => actions.reduce((ac2, ac1) => (state, dispatch, getState, rootDispatch, rootGetState) => ac1(ac2(state, dispatch, getState, rootDispatch, rootGetState), dispatch, getState, rootDispatch, rootGetState));
+export const reduceActions = (...actions) => actions.reduce(reduceActionsAccumulator);
 
 
 // Action creator utilities.
