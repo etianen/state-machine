@@ -137,7 +137,10 @@ export const createAsyncAction = func => (state, dispatch, getState, rootDispatc
     return getState();
 };
 
-const reduceActionsAccumulator = (ac2, ac1) => (state, dispatch, getState, rootDispatch, rootGetState) => ac1(ac2(state, dispatch, getState, rootDispatch, rootGetState), dispatch, getState, rootDispatch, rootGetState);
+const reduceActionsAccumulator = (a1, a2) => createAsyncAction(dispatch => {
+    dispatch(a1);
+    dispatch(a2);
+});
 
 /**
  * Reduces the actions into a single action.
