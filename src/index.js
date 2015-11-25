@@ -35,7 +35,6 @@ export const createState = (props, selectors={}) => {
     defineProperty(proto, STATE_NAMESPACE, {
         value: {selectors}
     });
-    freeze(proto);
     // Create the record with the props.
     return freeze(assign(create(freeze(proto)), props));
 };
@@ -59,7 +58,7 @@ export const isState = value => value && value[STATE_NAMESPACE];
  *     and immediately call the listener to notify of current state. Returns
  *     an unsubscribe function.
  * dispatch(action): Mutates the state using the given action. An action is a
- *     function of type (state, dispatch, getState) => state.
+ *     function of type (state, dispatch, getState, rootDispatch, rootGetState) => state.
  */
 export const createStore = () => {
     // Wrapped state.
@@ -88,7 +87,7 @@ export const createStore = () => {
         // Run the action.
         dispatchDepth += 1;
         try {
-            state = action(state, dispatch, getState);
+            state = action(state, dispatch, getState, dispatch, getState);
         } finally {
             dispatchDepth -= 1;
         }
@@ -113,13 +112,13 @@ const EMPTY_STATE = createState();
  * If any of the keys of the new state are actions,
  * they will be dispatched with the value of the nested state.
  */
-export const setState = (obj, selectors={}) => (state=EMPTY_STATE, dispatch, getState) => {
+export const setState = (obj, selectors={}) => (state=EMPTY_STATE, dispatch, getState, rootDispatch, rootGetState) => {
     const mergedSelectors = isState(state) ? {...state[STATE_NAMESPACE].selectors, ...selectors} : selectors;
     const mergedProps = {...state, ...mapValues(obj, (value, key) => {
         if (isFunction(value)) {
             const nestedDispatch = action => dispatch(setState({[key]: action}));
             const nestedGetState = () => getState()[key];
-            return value(state[key], nestedDispatch, nestedGetState);
+            return value(state[key], nestedDispatch, nestedGetState, rootDispatch, rootGetState);
         }
         return value;
     })};
@@ -129,9 +128,9 @@ export const setState = (obj, selectors={}) => (state=EMPTY_STATE, dispatch, get
 /**
  * Creates an async action from the given function.
  *
- * The function must be of type (dispatch, getState) => undefined.
+ * The function must be of type (dispatch, getState, rootDispatch, rootGetState) => undefined.
  */
-export const createAsyncAction = func => (state, dispatch, getState) => {
+export const createAsyncAction = func => (state, dispatch, getState, rootDispatch, rootGetState) => {
     func(dispatch, getState);
     return getState();
 };
@@ -139,7 +138,7 @@ export const createAsyncAction = func => (state, dispatch, getState) => {
 /**
  * Reduces the actions into a single action.
  */
-export const reduceActions = (...actions) => actions.reduce((ac2, ac1) => (state, dispatch, getState) => ac1(ac2(state, dispatch, getState), dispatch, getState));
+export const reduceActions = (...actions) => actions.reduce((ac2, ac1) => (state, dispatch, getState, rootDispatch, rootGetState) => ac1(ac2(state, dispatch, getState, rootDispatch, rootGetState), dispatch, getState, rootDispatch, rootGetState));
 
 
 // Action creator utilities.
