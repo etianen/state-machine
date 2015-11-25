@@ -15,25 +15,27 @@ const mapValues = (src, func) => keys(src).reduce((dst, key) => {
 
 // Records.
 
-const STATE_NAMESPACE = "$$state";
+const STATE_NAMESPACE = "$$stateSelectors";
 
 const EMPTY_CACHE = {};
+
+const createStateProtoProp = (selector, key) => {
+    let cache = EMPTY_CACHE;
+    return {
+        get: function() {
+            return cache === EMPTY_CACHE ? cache = selector(this) : cache;
+        },
+        enumerable: true
+    };
+};
 
 /**
  * Creates an immutable state object.
  */
 export const createState = (props, selectors={}) => {
-    const proto = create(null, mapValues(selectors, (selector, key) => {
-        let cache = EMPTY_CACHE;
-        return {
-            get: function() {
-                return cache === EMPTY_CACHE ? cache = selector(this) : cache;
-            },
-            enumerable: true
-        };
-    }));
+    const proto = create(null, mapValues(selectors, createStateProtoProp));
     defineProperty(proto, STATE_NAMESPACE, {
-        value: {selectors}
+        value: selectors
     });
     // Create the record with the props.
     return freeze(assign(create(freeze(proto)), props));
@@ -44,7 +46,7 @@ export const createState = (props, selectors={}) => {
 
 const isFunction = value => typeof value === "function";
 
-export const isState = value => value && value[STATE_NAMESPACE];
+export const isState = value => !!(value && value[STATE_NAMESPACE]);
 
 
 // Stores.
@@ -113,7 +115,7 @@ const EMPTY_STATE = createState();
  * they will be dispatched with the value of the nested state.
  */
 export const setState = (obj, selectors={}) => (state=EMPTY_STATE, dispatch, getState, rootDispatch, rootGetState) => {
-    const mergedSelectors = isState(state) ? {...state[STATE_NAMESPACE].selectors, ...selectors} : selectors;
+    const mergedSelectors = isState(state) ? {...state[STATE_NAMESPACE], ...selectors} : selectors;
     const mergedProps = {...state, ...mapValues(obj, (value, key) => {
         if (isFunction(value)) {
             const nestedDispatch = action => dispatch(setState({[key]: action}));
