@@ -2,6 +2,7 @@ const keys = Object.keys;
 const create = Object.create;
 const assign = Object.assign;
 const freeze = Object.freeze;
+const defineProperty = Object.defineProperty;
 
 
 // General-purpose utilities.
@@ -31,7 +32,10 @@ export const createState = (props, selectors={}) => {
             enumerable: true
         };
     }));
-    proto[STATE_NAMESPACE] = {selectors};
+    defineProperty(proto, STATE_NAMESPACE, {
+        value: {selectors}
+    });
+    freeze(proto);
     // Create the record with the props.
     return freeze(assign(create(freeze(proto)), props));
 };
