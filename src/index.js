@@ -147,6 +147,8 @@ export const reduceActions = (...actions) => actions.reduce(reduceActionsAccumul
 
 // Action creator utilities.
 
+const bindActionCreator = (dispatch, actionCreator) => (...args) => dispatch(actionCreator(...args));
+
 /**
  * Binds the given action creators to call dispatch with their
  * action when invoked.
@@ -157,7 +159,7 @@ export const reduceActions = (...actions) => actions.reduce(reduceActionsAccumul
 export const bindActionCreators = (actionCreators, dispatch) => {
     const actions = mapValues(actionCreators, (actionCreator, key) => {
         if (isFunction(actionCreator)) {
-            return (...args) => dispatch(actionCreator(...args));
+            return bindActionCreator(dispatch, actionCreator);
         }
         return bindActionCreators(actionCreator, action => dispatch(setState({[key]: action})));
     });
