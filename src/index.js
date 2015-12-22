@@ -41,6 +41,15 @@ export const createState = (props, selectors={}) => {
     return freeze(assign(create(freeze(proto)), props));
 };
 
+/**
+ * Updates an immutable state object with new values and selectors.
+ */
+export const updateState = (state, props, selectors={}) => {
+    const mergedSelectors = isState(state) ? {...state[STATE_NAMESPACE], ...selectors} : selectors;
+    const mergedProps = {...state, ...props};
+    return createState(mergedProps, mergedSelectors);
+};
+
 
 // Type detection utilities.
 
@@ -114,17 +123,16 @@ const EMPTY_STATE = createState();
  * If any of the keys of the new state are actions,
  * they will be dispatched with the value of the nested state.
  */
-export const setState = (obj, selectors={}) => (state=EMPTY_STATE, dispatch, getState, rootDispatch, rootGetState) => {
-    const mergedSelectors = isState(state) ? {...state[STATE_NAMESPACE], ...selectors} : selectors;
-    const mergedProps = {...state, ...mapValues(obj, (value, key) => {
+export const setState = (props, selectors={}) => (state=EMPTY_STATE, dispatch, getState, rootDispatch, rootGetState) => {
+    const resolvedProps = mapValues(props, (value, key) => {
         if (isFunction(value)) {
             const nestedDispatch = action => dispatch(setState({[key]: action}));
             const nestedGetState = () => getState()[key];
             return value(state[key], nestedDispatch, nestedGetState, rootDispatch, rootGetState);
         }
         return value;
-    })};
-    return createState(mergedProps, mergedSelectors);
+    });
+    return updateState(state, resolvedProps, selectors);
 };
 
 /**
