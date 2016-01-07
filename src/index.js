@@ -1,8 +1,6 @@
 const keys = Object.keys;
-const create = Object.create;
 const assign = Object.assign;
 const freeze = Object.freeze;
-const defineProperty = Object.defineProperty;
 
 
 // General-purpose utilities.
@@ -13,49 +11,9 @@ const mapValues = (src, func) => keys(src).reduce((dst, key) => {
 }, {});
 
 
-// Records.
-
-const STATE_NAMESPACE = "$$stateSelectors";
-
-const EMPTY_CACHE = {};
-
-const createStateProtoProp = (selector, key) => {
-    let cache = EMPTY_CACHE;
-    return {
-        get: function() {
-            return cache === EMPTY_CACHE ? cache = selector(this) : cache;
-        },
-        enumerable: true
-    };
-};
-
-/**
- * Creates an immutable state object.
- */
-export const createState = (props, selectors={}) => {
-    const proto = create(null, mapValues(selectors, createStateProtoProp));
-    defineProperty(proto, STATE_NAMESPACE, {
-        value: selectors
-    });
-    // Create the record with the props.
-    return freeze(assign(create(freeze(proto)), props));
-};
-
-/**
- * Updates an immutable state object with new values and selectors.
- */
-export const updateState = (state, props, selectors={}) => {
-    const mergedSelectors = isState(state) ? {...state[STATE_NAMESPACE], ...selectors} : selectors;
-    const mergedProps = {...state, ...props};
-    return createState(mergedProps, mergedSelectors);
-};
-
-
 // Type detection utilities.
 
 const isFunction = value => typeof value === "function";
-
-export const isState = value => !!(value && value[STATE_NAMESPACE]);
 
 
 // Stores.
@@ -114,7 +72,7 @@ export const createStore = () => {
 
 // Action creators.
 
-const EMPTY_STATE = createState();
+const EMPTY_STATE = freeze({});
 
 /**
  * An action creator that will merge the existing
@@ -123,17 +81,14 @@ const EMPTY_STATE = createState();
  * If any of the keys of the new state are actions,
  * they will be dispatched with the value of the nested state.
  */
-export const setState = (props, selectors={}) => (state=EMPTY_STATE, dispatch, getState, rootDispatch, rootGetState) => {
-    const resolvedProps = mapValues(props, (value, key) => {
-        if (isFunction(value)) {
-            const nestedDispatch = action => dispatch(setState({[key]: action}));
-            const nestedGetState = () => getState()[key];
-            return value(state[key], nestedDispatch, nestedGetState, rootDispatch, rootGetState);
-        }
-        return value;
-    });
-    return updateState(state, resolvedProps, selectors);
-};
+export const setState = props => (state=EMPTY_STATE, dispatch, getState, rootDispatch, rootGetState) => freeze({...state, ...mapValues(props, (value, key) => {
+    if (isFunction(value)) {
+        const nestedDispatch = action => dispatch(setState({[key]: action}));
+        const nestedGetState = () => getState()[key];
+        return value(state[key], nestedDispatch, nestedGetState, rootDispatch, rootGetState);
+    }
+    return value;
+})});
 
 /**
  * Creates an async action from the given function.

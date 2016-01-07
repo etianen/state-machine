@@ -115,50 +115,6 @@ describe("state-machine", () => {
             expect(history).to.eql([initialState, stateWithFoo]);
         });
 
-        describe("with selectors", () => {
-
-            beforeEach(() => {
-                dispatch(setState({}, {
-                    fooUpper: state => state.foo.toUpperCase()
-                }));
-            });
-
-            it("allows selectors to be appled to the state", () => {
-                expect(history).to.eql([initialState, initialState]);
-                expect(history[1].fooUpper).to.be("FOO");
-            });
-
-            it("preserves existing state selectors", () => {
-                dispatch(setState({}));
-                expect(history).to.eql([initialState, initialState, initialState]);
-                expect(history[1].fooUpper).to.be("FOO");
-            });
-
-            it("allows destructuring of state selectors", () => {
-                const {fooUpper} = history[1];
-                expect(fooUpper).to.be("FOO");
-            });
-
-            it("does not include selectors in object enumeration", () => {
-                const {...values} = history[1];
-                expect(values).to.eql(initialState);
-            });
-
-            it("caches repeated selector execution", () => {
-                let callCount = 0;
-                dispatch(setState({}, {
-                    fooUpper: state => {
-                        callCount += 1;
-                        return state.foo.toUpperCase();
-                    }
-                }));
-                expect(history[2].fooUpper).to.be("FOO");
-                expect(history[2].fooUpper).to.be("FOO");
-                expect(callCount).to.be(1);
-            });
-
-        });
-
     });
 
 
