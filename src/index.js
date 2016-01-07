@@ -1,14 +1,22 @@
 const keys = Object.keys;
-const assign = Object.assign;
 const freeze = Object.freeze;
 
 
 // General-purpose utilities.
 
-const mapValues = (src, func) => keys(src).reduce((dst, key) => {
-    dst[key] = func(src[key], key);
+const assignWith = (dst, src, func) => {
+    const keyArray = keys(src);
+    const keyLength = keyArray.length;
+    for (let i = 0; i < keyLength; i++) {
+        const key = keyArray[i];
+        dst[key] = func(src[key], key);
+    }
     return dst;
-}, {});
+};
+
+const identity = v => v;
+
+const assign = Object.assign || ((dst, src) => assignWith(dst, src, identity));
 
 
 // Type detection utilities.
@@ -81,14 +89,14 @@ const EMPTY_STATE = freeze({});
  * If any of the keys of the new state are actions,
  * they will be dispatched with the value of the nested state.
  */
-export const setState = props => (state=EMPTY_STATE, dispatch, getState) => freeze({...state, ...mapValues(props, (value, key) => {
+export const setState = props => (state=EMPTY_STATE, dispatch, getState) => freeze(assignWith(assign({}, state), props, (value, key) => {
     if (isFunction(value)) {
         const nestedDispatch = action => dispatch(setState({[key]: action}));
         const nestedGetState = () => getState()[key];
         return value(state[key], nestedDispatch, nestedGetState);
     }
     return value;
-})});
+}));
 
 /**
  * Creates an async action from the given function.
@@ -123,7 +131,7 @@ const bindActionCreator = (dispatch, actionCreator) => (...args) => dispatch(act
  * be automatically invoked to set up initial state.
  */
 export const bindActionCreators = (actionCreators, dispatch) => {
-    const actions = mapValues(actionCreators, (actionCreator, key) => {
+    const actions = assignWith({}, actionCreators, (actionCreator, key) => {
         if (isFunction(actionCreator)) {
             return bindActionCreator(dispatch, actionCreator);
         }
@@ -136,7 +144,7 @@ export const bindActionCreators = (actionCreators, dispatch) => {
     return actions;
 };
 
-const reduceActionCreatorsAccumulator = (dst, src) => assign(dst, mapValues(src, (actionCreator, key) => dst[key] ? reduceActionCreators(dst[key], actionCreator) : actionCreator));
+const reduceActionCreatorsAccumulator = (dst, src) => assignWith(dst, src, (actionCreator, key) => dst[key] ? reduceActionCreators(dst[key], actionCreator) : actionCreator);
 
 /**
  * Reduces the action creators into a single action creator.
