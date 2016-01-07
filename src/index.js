@@ -1,4 +1,5 @@
 const keys = Object.keys;
+const assign = Object.assign;
 const freeze = Object.freeze;
 
 
@@ -13,10 +14,6 @@ const assignWith = (dst, src, func) => {
     }
     return dst;
 };
-
-const identity = v => v;
-
-const assign = Object.assign || ((dst, src) => assignWith(dst, src, identity));
 
 
 // Type detection utilities.
@@ -82,6 +79,12 @@ export const createStore = () => {
 
 const EMPTY_STATE = freeze({});
 
+const createNestedDispatch = (dispatch, key) => action => {
+    const props = {};
+    props[key] = action;
+    dispatch(setState(props));
+};
+
 /**
  * An action creator that will merge the existing
  * state with the new state.
@@ -91,7 +94,7 @@ const EMPTY_STATE = freeze({});
  */
 export const setState = props => (state=EMPTY_STATE, dispatch, getState) => freeze(assignWith(assign({}, state), props, (value, key) => {
     if (isFunction(value)) {
-        const nestedDispatch = action => dispatch(setState({[key]: action}));
+        const nestedDispatch = createNestedDispatch(dispatch, key);
         const nestedGetState = () => getState()[key];
         return value(state[key], nestedDispatch, nestedGetState);
     }
@@ -135,7 +138,7 @@ export const bindActionCreators = (actionCreators, dispatch) => {
         if (isFunction(actionCreator)) {
             return bindActionCreator(dispatch, actionCreator);
         }
-        return bindActionCreators(actionCreator, action => dispatch(setState({[key]: action})));
+        return bindActionCreators(actionCreator, createNestedDispatch(dispatch, key));
     });
     const {initialize} = actions;
     if (isFunction(initialize)) {
