@@ -27,7 +27,7 @@ const isFunction = value => typeof value === "function";
  *     and immediately call the listener to notify of current state. Returns
  *     an unsubscribe function.
  * dispatch(action): Mutates the state using the given action. An action is a
- *     function of type (state, dispatch, getState, store) => state.
+ *     function of type (state, dispatch, getState) => state.
  */
 export const createStore = () => {
     // Wrapped state.
@@ -56,7 +56,7 @@ export const createStore = () => {
         // Run the action.
         dispatchDepth += 1;
         try {
-            state = action(state, dispatch, getState, store);
+            state = action(state, dispatch, getState);
         } finally {
             dispatchDepth -= 1;
         }
@@ -66,8 +66,7 @@ export const createStore = () => {
         }
     };
     // All done!
-    const store = {getState, subscribe, dispatch};
-    return store;
+    return {getState, subscribe, dispatch};
 };
 
 
@@ -82,11 +81,11 @@ const EMPTY_STATE = freeze({});
  * If any of the keys of the new state are actions,
  * they will be dispatched with the value of the nested state.
  */
-export const setState = props => (state=EMPTY_STATE, dispatch, getState, store) => freeze({...state, ...mapValues(props, (value, key) => {
+export const setState = props => (state=EMPTY_STATE, dispatch, getState) => freeze({...state, ...mapValues(props, (value, key) => {
     if (isFunction(value)) {
         const nestedDispatch = action => dispatch(setState({[key]: action}));
         const nestedGetState = () => getState()[key];
-        return value(state[key], nestedDispatch, nestedGetState, store);
+        return value(state[key], nestedDispatch, nestedGetState);
     }
     return value;
 })});
@@ -94,10 +93,10 @@ export const setState = props => (state=EMPTY_STATE, dispatch, getState, store) 
 /**
  * Creates an async action from the given function.
  *
- * The function must be of type (dispatch, getState, store) => undefined.
+ * The function must be of type (dispatch, getState) => undefined.
  */
-export const createAsyncAction = func => (state, dispatch, getState, store) => {
-    func(dispatch, getState, store);
+export const createAsyncAction = func => (state, dispatch, getState) => {
+    func(dispatch, getState);
     return getState();
 };
 
