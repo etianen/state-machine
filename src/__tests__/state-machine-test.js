@@ -1,10 +1,10 @@
 import expect from "expect.js";
-import {createStore, bindActionCreators, setState, createAsyncAction, reduceActions, reduceActionCreators} from "../";
+import {createStore, bindActionCreators, setState, createAsyncAction} from "../";
 
 
 describe("state-machine", () => {
 
-    const actionCreators = reduceActionCreators({
+    const actionCreators = {
         initialize: () => setState({
             foo: "foo"
         }),
@@ -14,20 +14,13 @@ describe("state-machine", () => {
                     norf: "norf"
                 }),
                 setNorf: norf => setState({norf}),
-                setNorfReduced: norf => setState({norf: undefined})
-            }
-        }
-    }, {
-        bar: {
-            qux: {
-                setNorfReduced: norf => setState({norf}),
                 setNorfAsync: norf => createAsyncAction((dispatch, getState) => {
                     expect(getState()).to.eql({norf: "norf"});
                     dispatch(setState({norf}));
                 })
             }
         }
-    });
+    };
 
     const initialState = {
         foo: "foo",
@@ -118,20 +111,6 @@ describe("state-machine", () => {
     });
 
 
-    describe("reduced action", () => {
-
-        it("runs multiple actions in the order declared", () => {
-            dispatch(reduceActions(
-                setState({foo: undefined}),
-                setState({foo: undefined}),
-                setState({foo: "FOO"})
-            ));
-            expect(history).to.eql([initialState, stateWithFoo]);
-        });
-
-    });
-
-
     describe("async action", () => {
 
         it("provides a dispatch function", () => {
@@ -165,16 +144,6 @@ describe("state-machine", () => {
 
         it("runs async actions", () => {
             actions.bar.qux.setNorfAsync("NORF");
-            expect(history).to.eql([initialState, stateWithNorf]);
-        });
-
-    });
-
-
-    describe("reduceActionCreators", () => {
-
-        it("runs reduced action creators in the order declared", () => {
-            actions.bar.qux.setNorfReduced("NORF");
             expect(history).to.eql([initialState, stateWithNorf]);
         });
 

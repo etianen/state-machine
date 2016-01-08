@@ -77,13 +77,15 @@ export const createStore = () => {
 
 // Action creators.
 
-const EMPTY_STATE = freeze({});
-
 const createNestedDispatch = (dispatch, key) => action => {
     const props = {};
     props[key] = action;
     dispatch(setState(props));
 };
+
+const getNestedState = (state, key) => state == null ? undefined : state[key];
+
+const createNestedGetState = (getState, key) => () => getNestedState(getState(), key);
 
 /**
  * An action creator that will merge the existing
@@ -92,11 +94,11 @@ const createNestedDispatch = (dispatch, key) => action => {
  * If any of the keys of the new state are actions,
  * they will be dispatched with the value of the nested state.
  */
-export const setState = props => (state=EMPTY_STATE, dispatch, getState) => freeze(assignWith(assign({}, state), props, (value, key) => {
+export const setState = props => (state, dispatch, getState) => freeze(assignWith(assign({}, state), props, (value, key) => {
     if (isFunction(value)) {
         const nestedDispatch = createNestedDispatch(dispatch, key);
-        const nestedGetState = () => getState()[key];
-        return value(state[key], nestedDispatch, nestedGetState);
+        const nestedGetState = createNestedGetState(getState, key);
+        return value(getNestedState(state, key), nestedDispatch, nestedGetState);
     }
     return value;
 }));
@@ -110,16 +112,6 @@ export const createAsyncAction = func => (state, dispatch, getState) => {
     func(dispatch, getState);
     return getState();
 };
-
-const reduceActionsAccumulator = (a1, a2) => createAsyncAction(dispatch => {
-    dispatch(a1);
-    dispatch(a2);
-});
-
-/**
- * Reduces the actions into a single action.
- */
-export const reduceActions = (...actions) => actions.reduce(reduceActionsAccumulator);
 
 
 // Action creator utilities.
@@ -145,21 +137,4 @@ export const bindActionCreators = (actionCreators, dispatch) => {
         initialize();
     }
     return actions;
-};
-
-const reduceActionCreatorsAccumulator = (dst, src) => assignWith(dst, src, (actionCreator, key) => dst[key] ? reduceActionCreators(dst[key], actionCreator) : actionCreator);
-
-/**
- * Reduces the action creators into a single action creator.
- */
-export const reduceActionCreators = (...actionCreatorsList) => {
-    // Combine multiple functions into a single reduced action creator.
-    if (actionCreatorsList.every(isFunction)) {
-        const reducedActionCreator = (...args) => reduceActions(...actionCreatorsList.map(actionCreator => actionCreator(...args)));
-        // Preserve function annotations.
-        assign(reducedActionCreator, ...actionCreatorsList);
-        return reducedActionCreator;
-    }
-    // Merge nested action creators.
-    return actionCreatorsList.reduce(reduceActionCreatorsAccumulator, {});
 };
